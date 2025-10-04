@@ -93,7 +93,6 @@ const (
 	S3SettingKey = "s3_setting"
 	// ServerURLKey 是服务器URL设置的键
 	ServerURLKey = "server_url"
-	// CustomCSSKey 是自定义CSS的键
 	// MigrationKey 是数据库迁移的标记键
 	MigrationKey = "db_migration:message_to_echo:v1"
 )
@@ -111,5 +110,5 @@ const (
 
 const (
 	// Version 是当前版本号
-	Version = "2.5.10"
+	Version = "2.6.8"
 )

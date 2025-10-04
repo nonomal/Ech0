@@ -26,7 +26,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, computed } from 'vue'
+import { onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { fetchGetEchoById } from '@/service/api'
 import { ref } from 'vue'

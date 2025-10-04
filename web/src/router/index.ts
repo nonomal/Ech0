@@ -35,6 +35,11 @@ const router = createRouter({
       component: EchoView,
     },
     {
+      path: '/fediverse',
+      name: 'fediverse',
+      component: () => import('../views/fediverse/FediverseView.vue'),
+    },
+    {
       path: '/:pathMatch(.*)*',
       name: 'not-found',
       component: NotFoundView,

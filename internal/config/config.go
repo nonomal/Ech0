@@ -3,8 +3,11 @@ package config
 import (
 	"bytes"
 	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
 	_ "embed"
 	"encoding/hex"
+	"encoding/pem"
 	"log"
 	"os"
 
@@ -17,6 +20,14 @@ var Config AppConfig
 
 // JWT_SECRET 用于JWT签名的密钥
 var JWT_SECRET []byte
+
+// RSA_PRIVATE_KEY 用于联邦架构的私钥
+var RSA_PRIVATE *rsa.PrivateKey
+var RSA_PRIVATE_KEY []byte
+
+// RSA_PUBLIC_KEY 用于联邦架构的公钥
+var RSA_PUBLIC *rsa.PublicKey
+var RSA_PUBLIC_KEY []byte
 
 // AppConfig 应用程序配置结构体
 type AppConfig struct {
@@ -84,7 +95,11 @@ func LoadAppConfig() {
 		panic(model.READ_CONFIG_PANIC + ":" + err.Error())
 	}
 
+	// 初始化 JWT_SECRET
 	JWT_SECRET = GetJWTSecret()
+
+	// 初始化 RSA 密钥对
+	GenSecretKey()
 }
 
 // GetJWTSecret 加载JWT密钥
@@ -101,4 +116,102 @@ func GetJWTSecret() []byte {
 	}
 
 	return []byte(secret)
+}
+
+// GenSecretKey 生成用于联邦架构的密钥对，并保存到本地文件
+func GenSecretKey() {
+	const (
+		keyDir     = "data/keys"
+		privateKey = "private.pem"
+		publicKey  = "public.pem"
+	)
+	// 检查密钥文件是否已经存在
+	if _, err := os.Stat(keyDir); os.IsNotExist(err) {
+		// 创建存放密钥的目录
+		if err := os.Mkdir(keyDir, 0700); err != nil {
+			log.Fatalf("Failed to create key directory: %v", err)
+		}
+	}
+
+	genFlag := false
+	if _, err := os.Stat(keyDir + "/" + privateKey); err != nil {
+		log.Println("Private key not found, generating new key pair.")
+		genFlag = true
+	}
+
+	if _, err := os.Stat(keyDir + "/" + publicKey); err != nil {
+		log.Println("Public key not found, generating new key pair.")
+		genFlag = true
+	}
+
+	if genFlag {
+		//  2048 位 RSA 私钥
+		priv, err := rsa.GenerateKey(rand.Reader, 2048)
+		if err != nil {
+			log.Fatalf("Failed to generate private key: %v", err)
+		}
+
+		// 保存私钥到文件
+		privBytes := x509.MarshalPKCS1PrivateKey(priv)
+		privPem := pem.EncodeToMemory(&pem.Block{
+			Type:  "RSA PRIVATE KEY",
+			Bytes: privBytes,
+		})
+		os.WriteFile(keyDir+"/"+privateKey, privPem, 0600)
+
+		// 保存公钥到文件
+		pub := &priv.PublicKey
+		pubBytes, err := x509.MarshalPKIXPublicKey(pub)
+		if err != nil {
+			log.Fatalf("Failed to marshal public key: %v", err)
+		}
+		pubPem := pem.EncodeToMemory(&pem.Block{
+			Type:  "PUBLIC KEY",
+			Bytes: pubBytes,
+		})
+		os.WriteFile(keyDir+"/"+publicKey, pubPem, 0644)
+
+		log.Println("Generated RSA key pair and saved to private.pem and public.pem")
+		RSA_PRIVATE_KEY = privPem
+		RSA_PRIVATE = priv
+		RSA_PUBLIC_KEY = pubPem
+		RSA_PUBLIC = pub
+	} else {
+		// 读取现有的密钥文件
+		privPem, err := os.ReadFile(keyDir + "/" + privateKey)
+		if err == nil {
+			block, _ := pem.Decode(privPem)
+			if block == nil || block.Type != "RSA PRIVATE KEY" {
+				log.Fatal("Failed to decode PEM block containing private key")
+			}
+			priv, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+			if err != nil {
+				log.Fatalf("Failed to parse private key: %v", err)
+			}
+			RSA_PRIVATE = priv
+			RSA_PRIVATE_KEY = privPem
+		} else {
+			log.Println("Private key not found, generating new key pair.")
+		}
+		// 读取公钥文件
+		pubPem, err := os.ReadFile(keyDir + "/" + publicKey)
+		if err == nil {
+			block, _ := pem.Decode(pubPem)
+			if block == nil || block.Type != "PUBLIC KEY" {
+				log.Fatal("Failed to decode PEM block containing public key")
+			}
+			pub, err := x509.ParsePKIXPublicKey(block.Bytes)
+			if err != nil {
+				log.Fatalf("Failed to parse public key: %v", err)
+			}
+			rsaPub, ok := pub.(*rsa.PublicKey)
+			if !ok {
+				log.Fatal("Public key is not an RSA public key")
+			}
+			RSA_PUBLIC = rsaPub
+			RSA_PUBLIC_KEY = pubPem
+		} else {
+			log.Println("Public key not found, generating new key pair.")
+		}
+	}
 }
